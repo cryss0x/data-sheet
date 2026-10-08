@@ -1,0 +1,94 @@
+/*
+ * index.css
+ * ----------
+ * The app's look. Tailwind CSS does most of the work; the few rules here are
+ * the ones that are easier to write once, in plain CSS.
+ */
+
+@import 'tailwindcss';
+
+/* A small set of colours used over and over, so the app looks the same everywhere. */
+@theme {
+  --color-brand-50: #f0fdfa;
+  --color-brand-100: #ccfbf1;
+  --color-brand-200: #99f6e4;
+  --color-brand-500: #14b8a6;
+  --color-brand-600: #0d9488;
+  --color-brand-700: #0f766e;
+  --color-brand-800: #115e59;
+  --color-ink-500: #64748b;
+  --color-ink-700: #334155;
+  --color-ink-900: #0f172a;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #f1f5f9;
+  color: var(--color-ink-900);
+  font-family:
+    'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* Numbers in the table line up neatly when they use the same width for every digit. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A number box that shows thousands separators. */
+.amount-input {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Hide the little calendar box that the browser adds to text boxes. */
+input[type='text']::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+/* The printing layout is hidden on screen, and the app is hidden when printing. */
+.print-only {
+  display: none;
+}
+
+@media print {
+  body {
+    background: white;
+  }
+
+  .screen-only {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+}
+
+/* A gentle shake for the red warning, so it is noticed. */
+@keyframes nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+.nudge {
+  animation: nudge 0.25s ease-in-out 2;
+}

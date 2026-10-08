@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="My Data Sheet">
+  <rect width="512" height="512" rx="96" fill="#0f766e" />
+  <!-- A simple table: three columns and four lines, with a totals line. -->
+  <g fill="#ffffff">
+    <rect x="96" y="120" width="320" height="40" rx="10" opacity="0.95" />
+    <rect x="96" y="184" width="320" height="28" rx="8" opacity="0.55" />
+    <rect x="96" y="228" width="320" height="28" rx="8" opacity="0.35" />
+    <rect x="96" y="272" width="320" height="28" rx="8" opacity="0.55" />
+    <rect x="96" y="316" width="320" height="28" rx="8" opacity="0.35" />
+  </g>
+  <g fill="#99f6e4">
+    <rect x="96" y="384" width="320" height="44" rx="10" />
+  </g>
+  <g fill="#0f766e">
+    <rect x="188" y="120" width="10" height="64" />
+    <rect x="188" y="184" width="10" height="160" />
+  </g>
+</svg>

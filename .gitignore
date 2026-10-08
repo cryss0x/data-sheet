@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.tmp-check/
+*.local
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+.vercel/
