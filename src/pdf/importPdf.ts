@@ -23,8 +23,8 @@ export interface PdfImportResult {
 
 /** Reads one chosen PDF file and returns the table found in it. */
 export async function readPdfTable(file: File): Promise<PdfImportResult> {
-  const pdfjs = await import('pdfjs-dist')
-  const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const workerUrl = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
   const loading = pdfjs.getDocument({ data: await file.arrayBuffer() })
