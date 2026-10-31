@@ -65,6 +65,7 @@ const {
   detectColumnType,
   looksLikeDate,
   isNumericText,
+  splitTextIntoWords,
 } = await import('../src/pdf/importTable.ts')
 
 /* --------------------------------- 1. the KBL September expenses example (check 5) */
@@ -512,12 +513,17 @@ check('a file with no table raises an error', prose12, 'no table')
 check('a column of dates', detectColumnType('Date', ['2026-09-01', '30/09/2026', 'July 2026']), 'date')
 check('a column of money', detectColumnType('Fuel', ['90,000', '150000']), 'amount')
 check('a column of litres', detectColumnType('Quantity (Litres)', ['100', '200']), 'quantity')
+check('litres written with decimals stay a quantity', detectColumnType('Quantity (Litres)', ['100.00', '40.00']), 'quantity')
+check('a misspelt maintenance heading is still money', detectColumnType('Maintainance', ['60,000', '30,000']), 'amount')
+check('maintenance spelt correctly is money too', detectColumnType('Maintenance', ['60,000', '30,000']), 'amount')
 check('a phone column stays words', detectColumnType('Phone Number', ['0755112233', '0712345678']), 'text')
 check('a column of words stays words', detectColumnType('Description', ['Diesel', 'Repair']), 'text')
 check('a row number stays words', detectColumnType('SN', ['1', '2', '3']), 'text')
 check('a number with separators is a number', isNumericText('1,500,000'), true)
 check('a truck number is not a number', isNumericText('T537 EBR'), false)
 check('"July 2026" looks like a date', looksLikeDate('July 2026'), true)
+check('a date with a comma after the day looks like a date', looksLikeDate('1, September 2026'), true)
+check('a column of dates with commas after the day', detectColumnType('Date / Month', ['1, September 2026', '2, September, 2026']), 'date')
 
 // Two headings with the same name are kept apart, so no data is lost.
 const duplicate12 = buildTableFromLines(
@@ -533,6 +539,80 @@ check('the same heading twice gets two names', duplicate12.columns.map((column) 
   'Total 2',
 ])
 check('both columns keep their numbers', duplicate12.rows, [['500', '700']])
+
+// Two rows in a row that fill exactly the same boxes are still two rows. This
+// is the bug that put several records into one cell when importing a sheet.
+const adjacent12 = buildTableFromLines(
+  groupIntoLines([
+    word('Date', 10, 700),
+    word('Description', 60, 700),
+    word('Amount', 200, 700),
+    word('2026-09-01', 10, 680),
+    word('Diesel', 60, 680),
+    word('1,500', 225, 680),
+    word('2026-09-02', 10, 666),
+    word('Repair', 60, 666),
+    word('750', 225, 666),
+  ]),
+)
+check('close rows with the same boxes stay separate rows', adjacent12.rows.length, 2)
+check('the first close row keeps its own cells', adjacent12.rows[0], ['2026-09-01', 'Diesel', '1,500'])
+check('the second close row keeps its own cells', adjacent12.rows[1], ['2026-09-02', 'Repair', '750'])
+
+// The totals a spreadsheet puts under a table are not rows to import again.
+const summary12 = buildTableFromLines(
+  groupIntoLines([
+    word('Date', 10, 700),
+    word('Description', 60, 700),
+    word('Amount', 200, 700),
+    word('2026-09-01', 10, 680),
+    word('Diesel', 60, 680),
+    word('1,500', 225, 680),
+    word('EXPENSES PER CATEGORY', 60, 660),
+    word('1,450', 225, 660),
+    word('TOTAL EXPENSES', 60, 640),
+    word('1,450', 225, 640),
+  ]),
+)
+check('spreadsheet totals are not imported as rows', summary12.rows.length, 1)
+
+// A PDF can store a whole row of neighbouring boxes as one piece of text, for
+// example "1, September 2026 Fuel" for the date and the description. It must be
+// cut into words first, or the date and the description end up in one cell.
+const wideWords12 = splitTextIntoWords({
+  page: 1,
+  str: '1, September 2026 Fuel',
+  x: 55.6,
+  y: 680,
+  end: 121.6,
+  height: 6,
+})
+check('a row stored as one piece is cut into words', wideWords12.map((item) => item.str), [
+  '1,',
+  'September',
+  '2026',
+  'Fuel',
+])
+check('the last word of a wide piece starts at its own column', wideWords12[3].x > 109, true)
+
+const wideTable12 = buildTableFromLines(
+  groupIntoLines([
+    word('Date / Month', 51.5, 700, 1, 7.48),
+    word('Description', 109.7, 700, 1, 7.48),
+    word('Truck Number', 236.3, 700, 1, 7.48),
+    word('Fuel', 652.4, 700, 1, 7.0),
+    ...wideWords12,
+    word('T711EQQ', 236.3, 680, 1, 6),
+    word('405,200', 671.5, 680, 1, 6),
+  ]),
+)
+check('a date and the words beside it stay in separate columns', wideTable12.rows[0], [
+  '1, September 2026',
+  'Fuel',
+  'T711EQQ',
+  '405,200',
+])
+check('the date is still read as a date', wideTable12.columns[0].type, 'date')
 
 /* ------- 13. reading the sample PDF back (ROUNDTRIP=1 npm run check) */
 

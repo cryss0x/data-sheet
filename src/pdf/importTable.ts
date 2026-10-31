@@ -73,11 +73,16 @@ const FOOTER_LINES = [
   /^totals per column$/i,
   /^grand total\b/i,
   /^rows with details\b/i,
+  /^expenses per category(\s+[\d,.]+)*$/i,
+  /^total expenses?(\s+[\d,.]+)*$/i,
 ]
 
 /** Heading words that mean "money", so the column goes into the grand total. */
 const MONEY_NAME =
-  /amount|total|price|cost|salary|wage|fuel|expense|fee|fine|money|income|revenue|balance|charge|tax|payment|mileage|maintenance|offence|spare parts/i
+  /amount|total|price|cost|salary|wage|fuel|expense|fee|fine|money|income|revenue|balance|charge|tax|payment|mileage|maintenance|maintainance|maintainence|maintanance|maintance|offence|spare parts/i
+
+/** Heading words that mean "a number to add up, but not money". */
+const QUANTITY_NAME = /quantity|quantities|litre|liter|volume|\btrips?\b|\bkm\b|kilomet|\bhours?\b|\bpcs?\b|\bunits?\b/i
 
 /** Heading words that mean "these are not numbers to add up". */
 const TEXT_NAME = /phone|mobile|contact|serial|\bcode\b|^sn$|^no\.?$|^nr\.?$|^id$|year/i
@@ -86,7 +91,7 @@ const TEXT_NAME = /phone|mobile|contact|serial|\bcode\b|^sn$|^no\.?$|^nr\.?$|^id
 const DATE_PATTERNS = [
   /^\d{4}-\d{1,2}-\d{1,2}$/,
   /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/,
-  /^\d{1,2}\s+[A-Za-z]{3,9},?\s+\d{4}$/,
+  /^\d{1,2},?\s+[A-Za-z]{3,9},?\s+\d{4}$/,
   /^[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}$/,
   /^[A-Za-z]{3,9}\s+\d{4}$/,
 ]
@@ -114,6 +119,32 @@ function joinWords(left: string, right: string): string {
   if (left === '' || right === '') return left + right
   if (left.endsWith(' ') || right.startsWith(' ')) return left + right
   return `${left} ${right}`
+}
+
+/**
+ * A PDF often stores a whole row of neighbouring boxes as one piece of text,
+ * for example "1, September 2026 Fuel" for the date and the description. The
+ * reader only gives the start and the width of the whole piece, so each word
+ * is given the share of that width that matches its share of the characters.
+ * Without this, a date and the words beside it would be put into one cell.
+ */
+export function splitTextIntoWords(word: PdfWord): PdfWord[] {
+  const raw = word.str
+  const tokens = [...raw.matchAll(/\S+/g)]
+  if (tokens.length <= 1) return [word]
+
+  const width = Math.max(word.end - word.x, 0)
+  if (width === 0) return [word]
+
+  return tokens.map((token) => {
+    const start = token.index ?? 0
+    return {
+      ...word,
+      str: token[0],
+      x: word.x + (width * start) / raw.length,
+      end: word.x + (width * (start + token[0].length)) / raw.length,
+    }
+  })
 }
 
 /** Puts every word on the page onto the line it belongs to. */
@@ -225,6 +256,7 @@ export function detectColumnType(name: string, values: string[]): ColumnType {
   if (TEXT_NAME.test(name.trim())) return 'text'
   if (filled.filter(looksLikeDate).length >= filled.length * 0.8) return 'date'
   if (filled.filter(isNumericText).length >= filled.length * 0.8) {
+    if (QUANTITY_NAME.test(name)) return 'quantity'
     if (MONEY_NAME.test(name)) return 'amount'
     if (filled.some((value) => /\.\d/.test(value))) return 'amount'
     return 'quantity'
@@ -265,8 +297,10 @@ export function buildTableFromLines(lines: PdfLine[]): ParsedTable {
   const names = headingNames(header.cells)
   const starts = header.cells.map((cell) => cell.start)
   // A word may start a little to the left of its heading (centred headings,
-  // for example), so a small allowance is given when placing it.
-  const slack = Math.max(4, median(header.cells.map((cell) => cell.end - cell.start)) * 0.35)
+  // for example), so a small allowance is given when placing it. The allowance
+  // stays small: a wide heading must not pull in the last word of the column
+  // before it.
+  const slack = Math.max(2, Math.min(6, median(header.cells.map((cell) => cell.end - cell.start)) * 0.1))
 
   const rows: string[][] = []
   let current: { page: number; y: number; height: number; values: string[] } | null = null
@@ -308,7 +342,9 @@ export function buildTableFromLines(lines: PdfLine[]): ParsedTable {
     const values = new Array<string>(names.length).fill('')
     const lastEnd = new Array<number>(names.length).fill(Number.NEGATIVE_INFINITY)
     const filled: number[] = []
-    const words = [...entry.line.words].sort((a, b) => a.x - b.x)
+    const words = entry.line.words
+      .flatMap((word) => splitTextIntoWords(word))
+      .sort((a, b) => a.x - b.x)
     for (const word of words) {
       const value = word.str.trim()
       if (value === '') continue
@@ -324,13 +360,16 @@ export function buildTableFromLines(lines: PdfLine[]): ParsedTable {
     if (filled.length === 0) continue
 
     // A line written close under the row above, continuing a box that is
-    // already open there, is a word that was wrapped inside that box.
+    // already open there, is a word that was wrapped inside that box. A line
+    // that starts a new value in the first column is a new row, not a wrap -
+    // even when the rows below each other fill the same boxes.
     const row = current
     const gap = row && row.page === entry.line.page ? row.y - entry.line.y : Number.POSITIVE_INFINITY
     const continuesRow =
       row !== null &&
-      gap <= 1.5 * Math.max(row.height, entry.height) &&
-      filled.every((column) => row.values[column] !== '')
+      gap <= 1.25 * Math.max(row.height, entry.height) &&
+      filled.every((column) => row.values[column] !== '') &&
+      (values[0] === '' || filled.length === 1)
 
     if (continuesRow && row) {
       for (const column of filled) {
